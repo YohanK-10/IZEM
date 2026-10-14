@@ -1,30 +1,31 @@
-# Architecture
+# Architecture overview
 
-```mermaid
-flowchart LR
-    UI[Vue / TypeScript / Pinia] --> API[FastAPI routes]
-    API --> AUTH[Authentication and resource permissions]
-    API --> DB[(SQLAlchemy / SQLite or PostgreSQL)]
-    API --> JOBS[AI job queue]
-    JOBS --> AI[Mock feedback or configured model]
-    JOBS --> DB
-    API --> WS[WebSocket updates]
-    WS --> UI
-    API --> EXPORT[Analytics and feedback exports]
-```
+IZEM is a Vue client backed by a FastAPI application. FastAPI serves the compiled frontend and starts the background AI worker loop through its lifespan handler.
 
-## Frontend
+## Implementation map
 
-Vue views use Pinia stores and a typed API client. Route guards select the appropriate participant, reviewer, or instructor experience. Components display queue position, review actions, notifications, and progress.
+| Concern | Main implementation |
+| --- | --- |
+| App lifecycle and frontend hosting | [app/main.py](../app/main.py) |
+| Resource access checks | [app/auth/permissions.py](../app/auth/permissions.py) |
+| Schema and database setup | [app/models/db.py](../app/models/db.py) |
+| HTTP workflows | [app/routes/api.py](../app/routes/api.py) |
+| Sign-off administration and analytics | [app/routes/admin_signoff.py](../app/routes/admin_signoff.py) |
+| Database-backed AI work | [app/services/ai_job_queue.py](../app/services/ai_job_queue.py) |
+| Feedback generation | [app/services/openai_feedback.py](../app/services/openai_feedback.py) |
+| Reviewer ownership and actions | [app/services/help_request_service.py](../app/services/help_request_service.py) |
+| Client transport | [frontend/src/app/api/client.ts](../frontend/src/app/api/client.ts) |
 
-## Backend
+## Submission and AI work
 
-FastAPI routes validate access to courses, rooms, assignments, and requests. Services handle queue state, AI jobs, analytics, notifications, and exports. SQLAlchemy models represent users, sessions, queues, requests, and feedback history.
+Submission saves the help request and its queued AI state together. Workers poll the database for pending requests, claim them with a conditional update, and execute synchronous feedback generation in a thread. Generated feedback and failure state are persisted on the request. Startup recovery requeues processing jobs older than the configured stale threshold.
 
-## Feedback lifecycle
+## Review and updates
 
-A submission enters a queue. Background AI work records progress and generated feedback. A reviewer claims the request and approves or edits the response. The request records final feedback and resolution timing, which feed analytics and participant progress views.
+Review actions validate access and establish reviewer ownership before updating a request. They save final feedback, review history, notifications, and resolution timing. The frontend polls HTTP endpoints for queue, request, and notification updates. The WebSocket manager module is currently unconnected to registered routes and client transport.
 
-## Demo boundaries
+## Demo and persistence
 
-The synthetic seed script creates fictional accounts and a workshop with active and resolved requests. Mock AI avoids credentials and network calls. SQLite provides a simple local setup; the database configuration also supports PostgreSQL. Canvas integration is optional and defaults to a placeholder hostname.
+The synthetic seed script creates fictional accounts and a workshop with active and resolved requests. Mock AI avoids model credentials. SQLite provides the default local setup, while SQLAlchemy connection configuration also supports PostgreSQL. Canvas integration is optional and defaults to a placeholder hostname.
+
+For the diagram, API summary, setup instructions, and implementation tradeoffs, see [the README](../README.md).
